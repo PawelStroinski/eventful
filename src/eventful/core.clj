@@ -34,7 +34,6 @@
            (scala Option)
            (java.util.concurrent TimeUnit)
            (eventstore.cluster ClusterSettings)
-           (eventstore.tcp ConnectionActor)
            (eventstore.util ActorCloseable)))
 
 (defn- num?? [x] (or (not x) (number? x)))
@@ -607,7 +606,7 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
 
   The second argument determines starting point, direction and count.
   If start is nil, reading starts at the first or at the latest event
-  (depeneding on direction). If max-count is positive, direction is forward,
+  (depending on direction). If max-count is positive, direction is forward,
   otherwise is backward. Please refer to eventful.core-test namespace for
   examples.
 
@@ -639,7 +638,7 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
   Options:
   :conn             - (required) see write-events fn
   :pos              - position to start reading from. if omitted, reading starts
-                      at the first or at the latest event (depeneding on
+                      at the first or at the latest event (depending on
                       direction). for paging use :next-pos returned in metadata.
   :resolve-link-tos - see read-event fn
   :req-master       - see write-events fn
@@ -701,7 +700,7 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
                    (-> (.cause fail) error->map error))
                  (.unhandled ^Actor this x)))))))
 
-(defn subscribe-to-stream
+(defn ^Closeable subscribe-to-stream
   "Subscribes to a single event stream. New events written to the stream while
   the subscription is active will be pushed to the client. If :from is
   specified, existing events :from onwards are read from the stream and
@@ -747,7 +746,7 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
                               resolve-link-tos (creds m))
       (.subscribeToStream conn stream o resolve-link-tos (creds m)))))
 
-(defn subscribe-to-all-streams
+(defn ^Closeable subscribe-to-all-streams
   "Subscribes to all events in the event store. New events written to the stream
   while the subscription is active will be pushed to the client. If :pos is
   specified, existing events after position :pos (excluding) are read from the
