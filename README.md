@@ -13,6 +13,12 @@ and covers (almost) all of the API of the JVM Client.
 
 This library is still in alpha.
 
+## Demo
+
+[Console Stream Reader](demo/console-stream-reader):
+
+[![Console Stream Reader screenshot](demo/console-stream-reader/doc/screenshot.png)](demo/console-stream-reader)
+
 ## Documentation
 
 - [A Quick but Eventful Tutorial](https://PawelStroinski.github.io/eventful/tutorial.html)
