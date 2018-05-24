@@ -8,7 +8,8 @@
   This namespace covers (almost) all of the API of the JVM Client and this
   documentation often copies its documentation when it may be helpful."
   (:require [clojure.java.io :as io]
-            [clojure.edn :as edn])
+            [clojure.edn :as edn]
+            [manifold.deferred :as d])
   (:import (eventstore.j SettingsBuilder EventDataBuilder EsConnectionFactory
                          EsConnection EsTransaction WriteEventsBuilder
                          PersistentSubscriptionSettingsBuilder)
@@ -162,39 +163,41 @@
 
 (defn- error->map [x] {:error-type (error-types (class x) :other) :error x})
 
-(defn- ->promise
+(defn- wrap-error [^Throwable x] (ex-info (.getMessage x) (error->map x)))
+
+(defn- ->deferred
   ([^Future future]
-   (->promise future (constantly :done)))
+   (->deferred future (constantly :done)))
   ([^Future future success-fn]
-   (let [p (promise)]
+   (let [d (d/deferred)]
      (.onSuccess future (proxy [OnSuccess] []
-                          (onSuccess [x] (deliver p (success-fn x))))
+                          (onSuccess [x] (deliver d (success-fn x))))
                  dispatcher)
      (.onFailure future (proxy [OnFailure] []
-                          (onFailure [x] (deliver p (error->map x))))
+                          (onFailure [x] (d/error! d (wrap-error x))))
                  dispatcher)
-     p)))
+     d)))
 
 (defn- listener
-  [p success-class success-fn]
+  [d success-class success-fn]
   (actor (onReceive
            [x]
            (condp instance? x
-             success-class (deliver p (success-fn x))
+             success-class (deliver d (success-fn x))
              Status$Failure (let [c (.cause ^Status$Failure x)]
-                              (deliver p (error->map c)))
+                              (d/error! d (wrap-error c)))
              (.unhandled ^Actor this x)))))
 
 (defn- conn? [x] (instance? EsConnection x))
 
 (defn disconnect
-  "Disconnects connection to the event store. Returns a promise which derefs to
+  "Disconnects connection to the event store. Returns a deferred which derefs to
   :done when the system is terminated.
 
   WARNING: uses a hack to get a private field from the JVM Client!"
   [conn]
   {:pre [(conn? conn)]}
-  (-> (.. (conn-actor conn) system terminate) (->promise)))
+  (-> (.. (conn-actor conn) system terminate) (->deferred)))
 
 (defmulti ^Content serialize
           "Serializes x to a format where format is a keyword.
@@ -333,12 +336,12 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
   it, first please wrap it like this: {:eventful.core/event <your event>}. You
   can use the wrap-event convenience fn.
 
-  The return value is a promise which derefs to a map with values for:
+  The return value is a deferred which derefs to a map with values for:
   -   in case of a success:
   :next-exp-ver - the next expected version for the stream
   :pos          - the position of the write in the log (has :commit and :prepare
                   subkeys, can be nil)
-  -   in case of a failure:
+  -   in case of a failure (needs to catched on deref and accessed via ex-data):
   :error-type - :wrong-exp-ver, :stream-not-found, :not-authenticated or :other
   :error      - a Throwable
 
@@ -349,12 +352,12 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
                   {:event :created :name \"foo\"}))"
   [{:keys [^EsConnection conn stream exp-ver] :as m} & events]
   {:pre [(conn? conn) (stream? stream) (exp-ver? exp-ver) (seq events)]}
-  (let [p (promise)
+  (let [d (d/deferred)
         msg (write-events-msg m events)
-        listener (spawn conn (listener p WriteEventsCompleted
+        listener (spawn conn (listener d WriteEventsCompleted
                                        write-events-completed->map))]
     (.tell (conn-actor conn) msg listener)
-    p))
+    d))
 
 (defn- event-record-meta
   [^EventRecord event]
@@ -402,7 +405,7 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
   :login            - ”
   :password         - ”
 
-  The successful return value is a promise which derefs to a deserialized event
+  The successful return value is a deferred which derefs to a deserialized event
   which has Clojure metadata with values for:
   :id     - the id of an event (UUID)
   :type   - the type of an event (string)
@@ -425,7 +428,7 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
          (bool? req-master) (num?? num)]}
   (-> (.readEvent conn stream (when num (EventNumber/apply ^long num))
                   resolve-link-tos (creds m) req-master)
-      (->promise #(event->map % m))))
+      (->deferred #(event->map % m))))
 
 (defn- pos->map
   [pos]
@@ -453,7 +456,7 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
   :login       - ”
   :password    - ”
 
-  The successful return value is a promise which derefs to a map with a key:
+  The successful return value is a deferred which derefs to a map with a key:
   :pos - see write-events fn
   The failed return value - see write-events fn."
   [{:keys [^EsConnection conn stream exp-ver hard-delete req-master]
@@ -462,8 +465,8 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
          (bool? req-master)]}
   (-> (.deleteStream conn stream (exp-ver->obj exp-ver) hard-delete (creds m)
                      req-master)
-      (->promise (fn [^DeleteResult dr]
-                   {:pos (when dr (pos->map (.logPosition dr)))}))))
+      (->deferred (fn [^DeleteResult dr]
+                    {:pos (when dr (pos->map (.logPosition dr)))}))))
 
 (defn tx-start
   "Starts a transaction in the event store on a given stream asynchronously. A
@@ -480,14 +483,14 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
   :login      - ”
   :password   - ”
 
-  The successful return value is a promise which derefs to a transaction object.
-  The failed return value - see write-events fn."
+  The successful return value is a deferred which derefs to a transaction
+  object. The failed return value - see write-events fn."
   [{:keys [^EsConnection conn stream exp-ver req-master]
     :or   {req-master true} :as m}]
   {:pre [(conn? conn) (stream? stream) (exp-ver? exp-ver) (bool? req-master)]}
   (-> (.startTransaction conn stream (exp-ver->obj exp-ver) (creds m)
                          req-master)
-      (->promise identity)))
+      (->deferred identity)))
 
 (defn tx-id
   "Gets id of a transaction tx returned by the tx-start or tx-cont fns."
@@ -508,8 +511,8 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
   object. The failed return value - see write-events fn."
   [{:keys [^EsConnection conn] :as m} ^long id]
   {:pre [(conn? conn) (integer? id)]}
-  (future (try (.continueTransaction conn id (creds m))
-               (catch Exception e (error->map e)))))
+  (d/future (try (.continueTransaction conn id (creds m))
+                 (catch Exception e (throw (wrap-error e))))))
 
 (defn tx-write-events
   "Writes to a transaction in the event store asynchronously.
@@ -521,20 +524,20 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
 
   Please refer to write-events fn for an info about events to write.
 
-  Returns a promise which derefs to :done on success. The failed return value -
+  Returns a deferred which derefs to :done on success. The failed return value -
   see write-events fn."
   [{:keys [^EsTransaction tx] :as m} & events]
   {:pre [(instance? EsTransaction tx) (seq events)]}
-  (-> (.write tx (map #(event-data % m) events)) (->promise)))
+  (-> (.write tx (map #(event-data % m) events)) (->deferred)))
 
 (defn tx-commit
   "Commits this transaction.
 
-  Returns a promise which derefs to :done on success. The failed return value -
+  Returns a deferred which derefs to :done on success. The failed return value -
   see write-events fn."
   [^EsTransaction tx]
   {:pre [(instance? EsTransaction tx)]}
-  (-> (.commit tx) (->promise)))
+  (-> (.commit tx) (->deferred)))
 
 (defn- fn?? [x] (or (not x) (fn? x)))
 
@@ -610,7 +613,7 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
   otherwise is backward. Please refer to eventful.core-test namespace for
   examples.
 
-  The successful return value is a promise which derefs to a vector of events.
+  The successful return value is a deferred which derefs to a vector of events.
   Please refer to read-event fn for an info about returned events. Additionally,
   the vector itself has Clojure metadata with values for:
   :event-num       - a map with the :next event number (can be nil) and the
@@ -629,7 +632,7 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
                                   resolve-link-tos (creds m) req-master)
         (.readStreamEventsBackward conn stream (from-num v) (- max-count)
                                    resolve-link-tos (creds m) req-master))
-      (->promise #(stream->vec % m))))
+      (->deferred #(stream->vec % m))))
 
 (defn read-all-streams
   "Reads all events in the node forward (e.g. beginning to end) or backwards
@@ -650,7 +653,7 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
 
   If max-count is positive, direction is forward, otherwise is backward.
 
-  The successful return value is a promise which derefs to a vector of events.
+  The successful return value is a deferred which derefs to a vector of events.
   Please refer to read-event fn for an info about returned events. One extra
   metadata returned with each event is:
   :pos - the event position (has :commit and :prepare subkeys, can be nil)
@@ -670,7 +673,7 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
                                resolve-link-tos (creds m) req-master)
         (.readAllEventsBackward conn (map->pos pos) (- max-count)
                                 resolve-link-tos (creds m) req-master))
-      (->promise #(all-streams->vec % m))))
+      (->deferred #(all-streams->vec % m))))
 
 (defn- dispatch-fn
   [{:keys [event where]} & {:keys [event-fn where-fn]}]
@@ -729,7 +732,7 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
            map. :event will not be called if the return value is falsy. please
            refer to read-event fn for an info about metadata map. the difference
            is that the value of :meta is bytes (use deserialize multimethod).
-  :error - called with one argument which is the error - see write-events fn
+  :error - called with one argument which is the error map - see write-events fn
   :close - called when subscription closes (no arguments)
 
   The return value can be used to close the subscription by calling the
@@ -822,7 +825,7 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
   {:pre [(conn? conn) (stream? stream) (exp-ver? exp-ver)]}
   (let [bytes (-> (serialize metadata format) (.. value toArray))]
     (-> (.setStreamMetadata conn stream (exp-ver->obj exp-ver) bytes (creds m))
-        (->promise write-result->map))))
+        (->deferred write-result->map))))
 
 (defn get-stream-metadata
   "Reads the metadata for a stream.
@@ -834,12 +837,12 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
   :login    - ”
   :password - ”
 
-  The successful return value is a promise derefing to deserialized metadata.
+  The successful return value is a deferred derefing to deserialized metadata.
   The failed return value - see write-events fn."
   [{:keys [^EsConnection conn stream format] :as m}]
   {:pre [(conn? conn) (stream? stream)]}
   (-> (.getStreamMetadataBytes conn stream (creds m))
-      (->promise #(deserialize % format))))
+      (->deferred #(deserialize % format))))
 
 (defn persistently-subscribe
   "Starts listening to a persistent subscription.
@@ -948,13 +951,13 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
                          distributes events to a single client until it is full.
                          then round robin to the next client.
 
-  Returns a promise which derefs to :done on success. The failed return value -
+  Returns a deferred which derefs to :done on success. The failed return value -
   see write-events fn."
   [{:keys [^EsConnection conn stream group] :as m} settings]
   {:pre [(conn? conn) (stream? stream) (string? group)]}
   (-> (.createPersistentSubscription
         conn stream group (persistent-subscription-settings settings) (creds m))
-      (->promise)))
+      (->deferred)))
 
 (defn update-persistent-subscription
   "Asynchronously updates a persistent subscription group on a stream. Please
@@ -963,14 +966,14 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
   {:pre [(conn? conn) (stream? stream) (string? group)]}
   (-> (.updatePersistentSubscription
         conn stream group (persistent-subscription-settings settings) (creds m))
-      (->promise)))
+      (->deferred)))
 
 (defn delete-persistent-subscription
   "Asynchronously deletes a persistent subscription group on a stream. Please
   refer to create-persistent-subscription fn for more info."
   [{:keys [^EsConnection conn stream group] :as m}]
   {:pre [(conn? conn) (stream? stream) (string? group)]}
-  (-> (.deletePersistentSubscription conn stream group (creds m)) (->promise)))
+  (-> (.deletePersistentSubscription conn stream group (creds m)) (->deferred)))
 
 (defn- ^UUID event-id [event] {:pre [event]} (-> event meta :id))
 

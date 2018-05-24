@@ -21,10 +21,7 @@ Now we can write the first two events in this tutorial (there will be more):
 (write-events {:conn conn :stream "inventory-item-1" :exp-ver :no-stream}
               {:event :created :name "foo"}
               {:event :items-checked-in :count 100})
-=>
-#object[clojure.core$promise$reify__7005
-        0x3a3d3cb5
-        {:status :pending, :val nil}]
+=> << … >>
 ```
 
 Let's investigate if it all worked out:
@@ -39,10 +36,7 @@ We can use the `:next-exp-ver` above to add another event:
 ```clojure
 (write-events {:conn conn :stream "inventory-item-1" :exp-ver 1}
               {:event :renamed :new-name "bar"})
-=>
-#object[clojure.core$promise$reify__7005
-        0x21de42ec
-        {:status :pending, :val nil}]
+=> << … >>
 @*1
 => {:next-exp-ver 2, :pos {:commit 46786, :prepare 46786}}
 ```

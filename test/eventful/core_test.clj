@@ -18,7 +18,7 @@
 (def connection-settings
   {:hostname "127.0.0.1" :port 1113 :login "admin" :password "changeit"})
 
-(defn ! [ref] (deref ref 10000 :timeout))
+(defn ! [ref] (try (deref ref 10000 :timeout) (catch Exception e (ex-data e))))
 
 (fact "connect returns an EsConnection and disconnect returns :done"
       (let [conn (connect connection-settings)]
@@ -39,7 +39,7 @@
                           :stream (str "eventful-" (UUID/randomUUID))})
             (reset! log [])
             ?form
-            @(delete-stream (any-exp-ver-opts))
+            ! (delete-stream (any-exp-ver-opts))
             @(disconnect (:conn @opts))
             (reset! opts nil))))
 
@@ -407,3 +407,16 @@
           => (contains #{[1 :where [0]] [2 :where [1]] [3 :where [2]]
                          [4 :where [0]] [5 :where [1]]} :gaps-ok)))
       (delete-persistent-subscriptions "a"))
+
+(fact "getting errors on deref"
+      (let [err1 (write-events (assoc @opts :exp-ver 1000) foobar)
+            err2 (read-event @opts 0)
+            succ (write-events (any-exp-ver-opts) foobar)
+            !' #(deref % 10000 :timeout)]
+        (!' err1) => (throws clojure.lang.ExceptionInfo
+                             #(and (= (-> % ex-data :error-type) :wrong-exp-ver)
+                                   (instance? EsException (-> % ex-data :error))
+                                   (seq (.getMessage %))))
+        (!' err2) => (throws clojure.lang.ExceptionInfo
+                             #(= (-> % ex-data :error-type) :stream-not-found))
+        (!' succ) => #(number? (:next-exp-ver %))))
