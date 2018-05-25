@@ -420,3 +420,13 @@
         (!' err2) => (throws clojure.lang.ExceptionInfo
                              #(= (-> % ex-data :error-type) :stream-not-found))
         (!' succ) => #(number? (:next-exp-ver %))))
+
+(fact "reducing a stream"
+      (let [vs (atom [])
+            rs read-stream
+            events (mapv vector (range 5))
+            f #(+ %1 (first %2))]
+        (with-redefs [read-stream (fn [m v] (swap! vs conj v) (rs m v))]
+          (! (apply write-events (any-exp-ver-opts) events))
+          (! (reduce-stream (assoc @opts :init 100 :batch-sz 2) f)) => 110
+          @vs => [[nil 2] [2 2] [4 2]])))

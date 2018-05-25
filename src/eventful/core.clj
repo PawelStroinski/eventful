@@ -985,3 +985,24 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
   (let [actor (.actor sub)
         msg (PersistentSubscriptionActor$ManualAck. (event-id event))]
     (.tell actor msg actor)))
+
+(defn reduce-stream
+  "Reads all events from a stream forwards and reduces them using a fn f. Please
+  refer to read-event fn for an info about events passed to f.
+
+  Options (in addition to all options accepted by read-stream fn):
+  :init     - initial value of reduction (nil by default)
+  :batch-sz - batch size (number of events, 500 by default)
+
+  The successful return value is a deferred which derefs to a reduction value.
+  The failed return value - see write-events fn."
+  [{:keys [init batch-sz] :or {batch-sz 500} :as m} f]
+  {:pre [(number? batch-sz)]}
+  (d/loop [start nil val init]
+    (d/let-flow [events (read-stream m [start batch-sz])]
+      (let [{:keys [end-of-stream event-num]} (meta events)
+            ret (reduce f val events)]
+        (if end-of-stream
+          ret
+          (do (assert (:next event-num))
+              (d/recur (:next event-num) ret)))))))
