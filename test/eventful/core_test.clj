@@ -39,7 +39,7 @@
                           :stream (str "eventful-" (UUID/randomUUID))})
             (reset! log [])
             ?form
-            ! (delete-stream (any-exp-ver-opts))
+            (! (delete-stream (any-exp-ver-opts)))
             @(disconnect (:conn @opts))
             (reset! opts nil))))
 
