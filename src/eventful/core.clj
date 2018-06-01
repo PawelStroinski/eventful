@@ -248,23 +248,23 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
     :no-stream (ExpectedVersion$NoStream$.)
     (ExpectedVersion/apply exp-ver)))
 
-(defn wrap-event
-  "If an event is not a clojure.lang.IObj, wraps it in order to be able to add
+(defn wrap
+  "If val is not a clojure.lang.IObj, wraps it in order to be able to add
   Clojure metadata to it. See also write-events fn."
-  [event]
-  (if (instance? IObj event) event {::event event}))
+  [val]
+  (if (instance? IObj val) val {::val val}))
 
-(defn unwrap-event
-  "Reverse of wrap-event fn. See also read-event fn."
-  [event]
-  (or (::event event) event))
+(defn unwrap
+  "Reverse of wrap fn. See also read-event fn."
+  [val]
+  (or (::val val) val))
 
 (defn- event-data
   [event {:keys [format meta-format]}]
   (let [{:keys [type id meta]} (meta event)]
     (-> (EventDataBuilder. (or type "event"))
         (.eventId (or id (UUID/randomUUID)))
-        (.data (serialize (unwrap-event event) format))
+        (.data (serialize (unwrap event) format))
         (cond-> meta (.metadata (serialize meta meta-format)))
         (.build))))
 
@@ -333,8 +333,8 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
   :meta - the arbitrary event metadata stored in the event store - anything
           (de)serializable.
   If an event is not a clojure.lang.IObj and you want to add Clojure metadata to
-  it, first please wrap it like this: {:eventful.core/event <your event>}. You
-  can use the wrap-event convenience fn.
+  it, first please wrap it like this: {:eventful.core/val <your event>}. You can
+  use the wrap convenience fn.
 
   The return value is a deferred which derefs to a map with values for:
   -   in case of a success:
@@ -375,7 +375,7 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
   {:pre [event]}
   (let [raw (.. event data data value toArray)
         meta (event-record-meta event)]
-    (with-meta (wrap-event (deserialize raw format))
+    (with-meta (wrap (deserialize raw format))
                (if (contains? meta :meta)
                  (update meta :meta #(deserialize % meta-format))
                  meta))))
@@ -414,8 +414,8 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
   :date   - an org.joda.time.DateTime when the event was added (can be nil)
   :meta   - (optional) the deserialized event metadata
   If an event is not a clojure.lang.IObj, it will be wrapped like this:
-  {:eventful.core/event <your event>} in order to be able to add Clojure
-  metadata to it. You can use the unwrap-event convenience fn.
+  {:eventful.core/val <your event>} in order to be able to add Clojure metadata
+  to it. You can use the unwrap convenience fn.
   The failed return value - see write-events fn.
 
   Example:
@@ -995,14 +995,16 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
   :batch-sz - batch size (number of events, 500 by default)
 
   The successful return value is a deferred which derefs to a reduction value.
+  Its metadata is merged with read-stream fn result metadata, so see unwrap fn.
   The failed return value - see write-events fn."
   [{:keys [init batch-sz] :or {batch-sz 500} :as m} f]
   {:pre [(number? batch-sz)]}
   (d/loop [start nil val init]
     (d/let-flow [events (read-stream m [start batch-sz])]
-      (let [{:keys [end-of-stream event-num]} (meta events)
+      (let [events-meta (meta events)
+            {:keys [end-of-stream event-num]} events-meta
             ret (reduce f val events)]
         (if end-of-stream
-          ret
+          (vary-meta (wrap ret) merge events-meta)
           (do (assert (:next event-num))
               (d/recur (:next event-num) ret)))))))

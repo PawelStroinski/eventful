@@ -89,29 +89,29 @@
 
 (fact "writing & reading events as bytes"
       (let [bytes (.getBytes "foo")
-            event1 (with-meta {::core/event bytes} {:meta bytes})
+            event1 (with-meta {::core/val bytes} {:meta bytes})
             event2 (.getBytes "bar")
             _ (! (write-events (merge (any-exp-ver-opts) bytes-opts)
                                event1 event2))
             actual1 (! (read-event (merge @opts bytes-opts) 0))
             actual2 (! (read-event (merge @opts bytes-opts) 1))]
-        (-> actual1 ::core/event vec) => (vec bytes)
+        (-> actual1 ::core/val vec) => (vec bytes)
         (-> actual1 meta :meta vec) => (vec bytes)
-        (-> actual2 ::core/event vec) => (vec event2)))
+        (-> actual2 ::core/val vec) => (vec event2)))
 
 (fact "writing & reading naked primitives as events"
-      (let [event1 (with-meta {::core/event 100} {:meta 1/3})
+      (let [event1 (with-meta {::core/val 100} {:meta 1/3})
             event2 "foo"
             event3 true
             _ (! (write-events (any-exp-ver-opts) event1 event2 event3))
             actual1 (! (read-event @opts 0))
             actual2 (! (read-event @opts 1))
             actual3 (! (read-event @opts 2))]
-        (::core/event actual1) => 100
+        (::core/val actual1) => 100
         (-> actual1 meta :meta) => 1/3
-        (::core/event actual2) => "foo"
+        (::core/val actual2) => "foo"
         (-> actual2 meta :id) => (partial instance? UUID)
-        (::core/event actual3) => true))
+        (::core/val actual3) => true))
 
 (fact "errors on write"
       (let [w1 (! (write-events (assoc @opts :exp-ver 1000) foobar))
@@ -428,5 +428,10 @@
             f #(+ %1 (first %2))]
         (with-redefs [read-stream (fn [m v] (swap! vs conj v) (rs m v))]
           (! (apply write-events (any-exp-ver-opts) events))
-          (! (reduce-stream (assoc @opts :init 100 :batch-sz 2) f)) => 110
+          (unwrap (! (reduce-stream (assoc @opts :init 5 :batch-sz 2) f))) => 15
           @vs => [[nil 2] [2 2] [4 2]])))
+
+(fact "metadata of a stream reduction"
+      (! (write-events (any-exp-ver-opts) foobar))
+      (-> (reduce-stream @opts (constantly ^{:baz true} {})) ! meta)
+      => #(and (:baz %) (:last-commit-pos %)))
