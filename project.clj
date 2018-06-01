@@ -1,4 +1,4 @@
-(defproject eventful "0.1.0-alpha3"
+(defproject eventful "0.1.0-alpha4"
   :description "Event Store client library"
   :url "https://github.com/PawelStroinski/eventful"
   :license {:name "Eclipse Public License"
