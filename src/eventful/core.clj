@@ -341,7 +341,7 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
   :next-exp-ver - the next expected version for the stream
   :pos          - the position of the write in the log (has :commit and :prepare
                   subkeys, can be nil)
-  -   in case of a failure (needs to catched on deref and accessed via ex-data):
+  -   in case of a failure (needs to be catched on deref and read via ex-data):
   :error-type - :wrong-exp-ver, :stream-not-found, :not-authenticated or :other
   :error      - a Throwable
 
@@ -990,7 +990,7 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
   "Reads all events from a stream forwards and reduces them using a fn f. Please
   refer to read-event fn for an info about events passed to f.
 
-  Options (in addition to all options accepted by read-stream fn):
+  Options (in addition to all of the options accepted by read-stream fn):
   :init     - initial value of reduction (nil by default)
   :batch-sz - batch size (number of events, 500 by default)
 
