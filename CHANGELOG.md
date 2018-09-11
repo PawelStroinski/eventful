@@ -1,3 +1,8 @@
+## 0.1.0-alpha5 - 2018-09-11
+
+* Updated dependencies
+* Added a new stress test for subscribe-to-all-streams
+
 ## 0.1.0-alpha4 - 2018-06-01
 
 * Added metadata to reduce-stream fn result
