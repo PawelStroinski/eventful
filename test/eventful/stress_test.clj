@@ -71,10 +71,33 @@
            (prn "***" c "*" stream "*" (! wr) "*" w "*" event1 "*" event2 "*"
                 (subvec @log c)))))])
 
+(defn sub-to-all-streams-is-serial-prop
+  [c sleep]
+  (reset! log [])
+  (let [stream (next-stream)
+        processing (atom false)
+        where (fn [m] (= (:stream m) stream))
+        event (fn [m]
+                (assert (not @processing))
+                (reset! processing true)
+                (let [x (rand-int sleep)]
+                  (println "Sleep for" x "@" (.getName (Thread/currentThread)))
+                  (Thread/sleep x))
+                (test/append m)
+                (reset! processing false))]
+    [(subscribe-to-all-streams {:conn conn} {:where where :event event})
+     (prop/for-all
+       [events (gen/vector (gen/map gen/string-ascii gen/string-ascii
+                                    {:num-elements 1}) c)]
+       (! (apply write-events {:conn conn :stream stream :exp-ver :no-stream}
+                 events))
+       (nil? (binding [test/*wait* (* c sleep)] (test/wait-for c))))]))
+
 (defn quick-check-sub [n [sub p]] (with-open [_ sub] (tc/quick-check n p)))
 
 (comment                                ; Be patient
   (tc/quick-check 1000 read-written-event-any-exp-ver-prop)
   (tc/quick-check 1000 read-written-event-strict-exp-ver-prop)
   (quick-check-sub 185 (write-events-in-tx-while-in-persistent-sub-prop))
-  (quick-check-sub 100000 (write-json-events-while-sub-to-all-streams-prop)))
+  (quick-check-sub 100000 (write-json-events-while-sub-to-all-streams-prop))
+  (quick-check-sub 1 (sub-to-all-streams-is-serial-prop 10000 500)))

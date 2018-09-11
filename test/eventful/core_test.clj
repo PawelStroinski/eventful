@@ -18,7 +18,9 @@
 (def connection-settings
   {:hostname "127.0.0.1" :port 1113 :login "admin" :password "changeit"})
 
-(defn ! [ref] (try (deref ref 10000 :timeout) (catch Exception e (ex-data e))))
+(def ^:dynamic *wait* 10000)
+
+(defn ! [ref] (try (deref ref *wait* :timeout) (catch Exception e (ex-data e))))
 
 (fact "connect returns an EsConnection and disconnect returns :done"
       (let [conn (connect connection-settings)]
