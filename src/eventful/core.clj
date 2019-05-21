@@ -286,6 +286,18 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
 
 (defn- or-nil [^Option opt] (when-not (.isEmpty opt) (.get opt)))
 
+(defn- pos->map
+  [^Position$Exact pos]
+  {:commit  (.commitPosition pos)
+   :prepare (.preparePosition pos)})
+
+(defn- pos?->map [pos] (when (instance? Position$Exact pos) (pos->map pos)))
+
+(defn- map->pos
+  [{:keys [^long commit ^long prepare]}]
+  (when (and commit prepare)
+    (Position/apply commit prepare)))
+
 (defn- write-events-completed->map
   [^WriteEventsCompleted x]
   {:pre [x (.. x numbersRange isDefined)]}
@@ -293,8 +305,7 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
         ^Position$Exact pos (when opt-pos (or-nil opt-pos))
         ^EventNumber$Range nr (.. x numbersRange get)]
     (conj {:next-exp-ver (.. nr end value)}
-          (when pos [:pos {:commit  (.commitPosition pos)
-                           :prepare (.preparePosition pos)}]))))
+          (when pos [:pos (pos->map pos)]))))
 
 (defn- spawn
   [conn props]
@@ -432,17 +443,6 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
                   resolve-link-tos (creds m) req-master)
       (->deferred #(event->map % m))))
 
-(defn- pos->map
-  [pos]
-  (when (instance? Position$Exact pos)
-    {:commit  (.commitPosition ^Position$Exact pos)
-     :prepare (.preparePosition ^Position$Exact pos)}))
-
-(defn- map->pos
-  [{:keys [^long commit ^long prepare]}]
-  (when (and commit prepare)
-    (Position/apply commit prepare)))
-
 (defn delete-stream
   "Deletes a stream from the event store.
 
@@ -468,7 +468,7 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
   (-> (.deleteStream conn stream (exp-ver->obj exp-ver) hard-delete (creds m)
                      req-master)
       (->deferred (fn [^DeleteResult dr]
-                    {:pos (when dr (pos->map (.logPosition dr)))}))))
+                    {:pos (when dr (pos?->map (.logPosition dr)))}))))
 
 (defn tx-start
   "Starts a transaction in the event store on a given stream asynchronously. A
@@ -658,13 +658,12 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
   The successful return value is a deferred which derefs to a vector of events.
   Please refer to read-event fn for an info about returned events. One extra
   metadata returned with each event is:
-  :pos - the event position (has :commit and :prepare subkeys, can be nil)
+  :pos - the event position (has :commit and :prepare subkeys)
   Additionally, the vector itself has Clojure metadata with values for:
   :dir      - either :forward or :backward
-  :this-pos - the position of this read (has :commit and :prepare subkeys, can
-              be nil)
+  :this-pos - the position of this read (has :commit and :prepare subkeys)
   :next-pos - the next position to use for paging (has :commit and :prepare
-              subkeys, can be nil)
+              subkeys)
   The failed return value - see write-events fn."
   [{:keys [^EsConnection conn pos resolve-link-tos req-master where]
     :or   {resolve-link-tos false req-master true} :as m} max-count]
@@ -776,7 +775,7 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
   Please refer to subscribe-to-stream fn for an info about callbacks. One extra
   metadata received with each event is:
   :pos - the event position which can be used as the :pos option to resubscribe
-         (has :commit and :prepare subkeys, can be nil)
+         (has :commit and :prepare subkeys)
 
   The return value - see subscribe-to-stream fn."
   [{:keys [^EsConnection conn pos resolve-link-tos]
@@ -802,7 +801,7 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
 
 (defn- write-result->map
   [^WriteResult wr]
-  {:pos          (when wr (pos->map (.logPosition wr)))
+  {:pos          (when wr (pos?->map (.logPosition wr)))
    :next-exp-ver (when wr (.. wr nextExpectedVersion value))})
 
 (defn set-stream-metadata
