@@ -115,6 +115,14 @@
         (-> actual2 meta :id) => (partial instance? UUID)
         (::core/val actual3) => true))
 
+(fact "writing an event with a duplicate id"
+      (let [event (with-meta foobar {:id (UUID/randomUUID)})
+            [w1 w2] (repeatedly 2 #(! (write-events (any-exp-ver-opts) event)))]
+        (:pos w1) => pos?'
+        (:next-exp-ver w1) => 0
+        (:pos w2) => nil
+        (:next-exp-ver w2) => 0))
+
 (fact "errors on write"
       (let [w1 (! (write-events (assoc @opts :exp-ver 1000) foobar))
             w2 (! (write-events (assoc @opts :exp-ver :any :login "?"

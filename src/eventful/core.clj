@@ -284,11 +284,13 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
       (.build)
       (with-creds m)))
 
+(defn- or-nil [^Option opt] (when-not (.isEmpty opt) (.get opt)))
+
 (defn- write-events-completed->map
   [^WriteEventsCompleted x]
   {:pre [x (.. x numbersRange isDefined)]}
   (let [opt-pos (.position x)
-        ^Position$Exact pos (when opt-pos (.getOrElse opt-pos nil))
+        ^Position$Exact pos (when opt-pos (or-nil opt-pos))
         ^EventNumber$Range nr (.. x numbersRange get)]
     (conj {:next-exp-ver (.. nr end value)}
           (when pos [:pos {:commit  (.commitPosition pos)
@@ -367,7 +369,7 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
            :type   (.eventType data)
            :num    (.. event number value)
            :stream (.. event streamId value)
-           :date   (.. event created (getOrElse nil))}
+           :date   (or-nil (.created event))}
           (when (seq meta) [:meta meta]))))
 
 (defn- event-record->map
