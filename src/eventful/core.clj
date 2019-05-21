@@ -856,14 +856,16 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
   with each group getting an at-least-once guarantee.
 
   Options:
-  :conn     - (required) see write-events fn
-  :stream   - ”
-  :group    - (required) the name of a group which should be created with the
-              create-persistent-subscription fn first
-  :auto-ack - if this is true (the default), an acknowledgement will be sent
-              automatically on each event. alternatively, use the manual-ack fn.
-  :login    - see write-events fn
-  :password - ”
+  :conn        - (required) see write-events fn
+  :stream      - ”
+  :group       - (required) the name of a group which should be created with the
+                 create-persistent-subscription fn first
+  :auto-ack    - if this is true (the default), an acknowledgement will be sent
+                 automatically on each event. otherwise, use the manual-ack fn.
+  :format      - see write-events fn
+  :meta-format - ”
+  :login       - ”
+  :password    - ”
 
   Please refer to subscribe-to-stream fn for an info about callbacks noting that
   the :close callback does not exist here.
