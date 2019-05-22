@@ -217,8 +217,8 @@ Finally let's close this subscription so it does not print any more events:
 
 ## JSON
 
-By default Eventful will write & read events in EDN. To use JSON instead, we
-need to do few things:
+By default Eventful will write & read events in Transit-JSON. To use plain JSON
+instead, we need to do few things:
 
 1. Include the cheshire dependency in our project.
 2. Require the `eventful.json` namespace.
@@ -236,6 +236,11 @@ your REPL and reconnect to the Event Store. The remaining two steps are:
 @(read-event {:conn conn :stream "inventory-item-1" :format :json} 9)
 => {"event" "items-removed", "count" 7}
 ```
+
+## EDN
+
+If you want to use EDN, all you need is to pass `:edn` in the `:format` option.
+No dependencies or requires required.
 
 ## Further Events
 

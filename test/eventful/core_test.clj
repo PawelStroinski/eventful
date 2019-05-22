@@ -101,6 +101,26 @@
         (-> actual1 meta :meta vec) => (vec bytes)
         (-> actual2 ::core/val vec) => (vec event2)))
 
+(fact "writing & reading an event as EDN"
+      (let [format-opts {:format :edn :meta-format :edn}
+            event (with-meta foobar {:meta foobar})
+            _ (! (write-events (merge (any-exp-ver-opts) format-opts) event))
+            actual (! (read-event (merge @opts format-opts) 0))
+            bytes (! (read-event (merge @opts bytes-opts) 0))
+            expected (str foobar)]
+        actual => foobar
+        (-> actual meta :meta) => foobar
+        (String. (::core/val bytes) "UTF-8") => expected
+        (String. (-> bytes meta :meta) "UTF-8") => expected))
+
+(fact "events are written as Transit-JSON by default"
+      (let [event (with-meta foobar {:meta foobar})
+            _ (! (write-events (any-exp-ver-opts) event))
+            actual (! (read-event (merge @opts bytes-opts) 0))
+            expected "[\"^ \",\"~:foo\",\"~:bar\"]"]
+        (String. (::core/val actual) "UTF-8") => expected
+        (String. (-> actual meta :meta) "UTF-8") => expected))
+
 (fact "writing & reading naked primitives as events"
       (let [event1 (with-meta {::core/val 100} {:meta 1/3})
             event2 "foo"
@@ -399,20 +419,21 @@
 (fact "filtering in subscriptions and when reading streams"
       (! (create-persistent-subscription (group-opts "a") nil))
       (let [f (fn [id] (fn [x] (append [id :where x]) (#{"x" "z"} (:type x))))
-            callbacks-w-filter #(assoc (callbacks % :event) :where (f %))]
+            callbacks+filter #(assoc (callbacks % :event) :where (f %))
+            g #(assoc % :meta-format :bytes)]
         (with-open
-          [_ (subscribe-to-stream @opts (callbacks-w-filter 1))
-           _ (subscribe-to-all-streams @opts (callbacks-w-filter 2))
-           _ (persistently-subscribe (group-opts "a") (callbacks-w-filter 3))]
-          (! (apply write-events (assoc (any-exp-ver-opts) :meta-format :bytes)
+          [_ (subscribe-to-stream (g @opts) (callbacks+filter 1))
+           _ (subscribe-to-all-streams (g @opts) (callbacks+filter 2))
+           _ (persistently-subscribe (g (group-opts "a")) (callbacks+filter 3))]
+          (! (apply write-events (g (any-exp-ver-opts))
                     (map #(with-meta [%1] {:type %2 :meta (byte-array 1 [%1])})
                          [0 1 2] ["x" "y" "z"])))
           (wait-for 15) => nil
           (->> @log (filter (comp vector? last)) (sort-by first))
           => [[1 [0]] [1 [2]] [2 [0]] [2 [2]] [3 [0]] [3 [2]]]
-          (! (read-stream (assoc @opts :where (f 4)) [nil -3])) => [[2] [0]]
-          (! (read-all-streams (-> @opts (dissoc :stream) (assoc :where (f 5)))
-                               -10)) => [[2] [0]]
+          (! (read-stream (g (assoc @opts :where (f 4))) [nil -3])) => [[2] [0]]
+          (! (read-all-streams (-> @opts (dissoc :stream) (assoc :where (f 5))
+                                   g) -10)) => [[2] [0]]
           (map #(update % 2 (comp vec :meta)) (filter #(= (count %) 3) @log))
           => (contains #{[1 :where [0]] [2 :where [1]] [3 :where [2]]
                          [4 :where [0]] [5 :where [1]]} :gaps-ok)))

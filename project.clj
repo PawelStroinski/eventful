@@ -4,7 +4,8 @@
   :license {:name "Eclipse Public License"
             :url  "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[com.geteventstore/eventstore-client_2.12 "5.0.8"]
-                 [manifold "0.1.8"]]
+                 [manifold "0.1.8"]
+                 [com.cognitect/transit-clj "0.8.309"]]
   :plugins [[lein-codox "0.10.3"]]
   :codox
   {:namespaces [eventful.core]

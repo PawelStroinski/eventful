@@ -17,7 +17,8 @@
    ["-S" "--start X" "Start from event number" :parse-fn str->int]
    ["-l" "--live" "Live subscription"]
    ["-m" "--meta" "Include event metadata"]
-   ["-j" "--json" "Deserialize JSON instead of EDN"]
+   ["-e" "--edn" "Deserialize EDN instead of Transit-JSON"]
+   ["-j" "--json" "Deserialize plain JSON instead of Transit-JSON"]
    ["-h" "--help" "Print this help"]])
 
 (defn valid? [{:keys [stream max-count live]}] (and stream (or max-count live)))
@@ -31,6 +32,7 @@
 (defn opts
   [m]
   (cond-> (select-keys m [:conn :stream])
+          (:edn m) (assoc :format :edn :meta-format :edn)
           (:json m) (assoc :format :json :meta-format :json)))
 
 (defn print-event [x m] (cprint x {:print-meta (:meta m)}) (println))

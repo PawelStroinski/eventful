@@ -3,13 +3,15 @@
   Wrapper around the JVM Client (TCP interface).
 
   Provides (hopefully) Clojure-friendly functions to work with the Event Store.
-  Supports EDN & JSON formats as well as raw bytes. It's easy to add more.
+  Supports Transit-JSON, EDN & JSON formats as well as raw bytes.
+  It's easy to add more.
 
   This namespace covers (almost) all of the API of the JVM Client and this
   documentation often copies its documentation when it may be helpful."
   (:require [clojure.java.io :as io]
             [clojure.edn :as edn]
-            [manifold.deferred :as d])
+            [manifold.deferred :as d]
+            [cognitect.transit :as t])
   (:import (eventstore.j SettingsBuilder EventDataBuilder EsConnectionFactory
                          EsConnection EsTransaction WriteEventsBuilder
                          PersistentSubscriptionSettingsBuilder)
@@ -18,9 +20,10 @@
                        Actor RepointableActorRef)
            (clojure.lang Agent IObj)
            (java.util UUID)
-           (java.io ByteArrayOutputStream PushbackReader Closeable)
+           (java.io ByteArrayOutputStream ByteArrayInputStream PushbackReader
+                    Closeable)
            (eventstore
-             Content ExpectedVersion ExpectedVersion$Any$
+             Content ContentType$Json$ ExpectedVersion ExpectedVersion$Any$
              ExpectedVersion$NoStream$ WriteResult WrongExpectedVersionException
              EventNumber Event DeleteResult Position$Exact UserCredentials
              StreamNotFoundException NotAuthenticatedException IndexedEvent
@@ -32,6 +35,7 @@
            (akka.dispatch OnSuccess OnFailure)
            (scala.concurrent ExecutionContext Future)
            (akka.japi Creator)
+           (akka.util ByteStringBuilder)
            (scala Option)
            (java.util.concurrent TimeUnit)
            (eventstore.cluster ClusterSettings)
@@ -203,10 +207,11 @@
           "Serializes x to a format where format is a keyword.
 
 Built-in formats:
-EDN    - this is the default format
-:json  - cheshire dependency should be added to your project and eventful.json
-         namespace should be required first
-:bytes - byte arrays
+Transit - Transit-JSON is the default format
+:edn    - EDN
+:json   - cheshire dependency should be added to your project and eventful.json
+          namespace should be required first
+:bytes  - byte arrays
 
 To add a custom format you can use eventful.json namespace as a starting point."
           {:arglists '([x format])}
@@ -220,7 +225,15 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
 
 (defmethod serialize :default
   [x format]
-  (let [s (ByteArrayOutputStream.)]
+  (let [builder (ByteStringBuilder.)]
+    (with-open [s (.asOutputStream builder)]
+      (let [w (t/writer s :json)]
+        (t/write w x)))
+    (Content/apply (.result builder) (ContentType$Json$.))))
+
+(defmethod serialize :edn
+  [x format]
+  (with-open [s (ByteArrayOutputStream. 4096)]
     (with-open [w (io/writer s)]
       (binding [*out* w]
         (pr x)))
@@ -231,6 +244,12 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
   (Content/apply ^bytes x))
 
 (defmethod deserialize :default
+  [bytes format]
+  (with-open [s (ByteArrayInputStream. bytes)]
+    (let [reader (t/reader s :json)]
+      (t/read reader))))
+
+(defmethod deserialize :edn
   [bytes format]
   (with-open [r (io/reader bytes)]
     (edn/read (PushbackReader. r))))
@@ -324,7 +343,7 @@ is a keyword. Please refer to serialize multimethod for an info about formats."
   :req-master  - should the event store refuse operation if it is not master?
                  (true by default)
   :format      - event serialization format - please refer to serialize
-                 multimethod for an info about formats (EDN by default)
+                 multimethod for an info about formats (Transit-JSON by default)
   :meta-format - event metadata serialization format (see :format above)
   :login       - optional user credentials to perform operation with
   :password    - ”
