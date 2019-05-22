@@ -1,3 +1,11 @@
+## 0.1.0-alpha6 - 2019-05-23
+
+* Updated serializers. Added Transit-JSON as the new default.
+* Cleared-up returning nil positions.
+* Fixed reading nil optionals.
+* Fixed documentation for persistently-subscribe.
+* Updated dependencies
+
 ## 0.1.0-alpha5 - 2018-09-11
 
 * Updated dependencies
