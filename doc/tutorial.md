@@ -2,7 +2,7 @@
 
 ## Getting Started
 
-After the [Event Store](https://eventstore.org/) is successfully installed and
+After the [EventStoreDB](https://eventstore.com/) is successfully installed and
 started, the obvious next step is to connect to it:
 
 ```clojure
@@ -217,7 +217,7 @@ Finally let's close this subscription so it does not print any more events:
 
 ## JSON
 
-By default Eventful will write & read events in Transit-JSON. To use plain JSON
+By default Eventful will write & read events in EDN. To use plain JSON
 instead, we need to do few things:
 
 1. Include the cheshire dependency in our project.
@@ -237,10 +237,25 @@ your REPL and reconnect to the Event Store. The remaining two steps are:
 => {"event" "items-removed", "count" 7}
 ```
 
-## EDN
+## Transit-JSON
 
-If you want to use EDN, all you need is to pass `:edn` in the `:format` option.
-No dependencies or requires required.
+If you want to use Transit-JSON, follow the steps for JSON above,
+but require the `eventful.transit` namespace instead. Also include the
+`com.cognitect/transit-clj` dependency in the project instead.
+Finally, `set :format` to `:transit`.
+
+However, remember this note from Transit documentation:
+*Transit is intended primarily as a wire protocol for transferring
+data between applications. If storing Transit data durably,
+readers and writers are expected to use the same version of Transit and you are
+responsible for migrating/transforming/re-storing that data when and if the
+transit format changes.*
+
+## Best Practices
+
+Remember to keep *your own* date metadata of events. You can use `:meta` key in
+event metadata map to do this. Without it,
+*[you can't do things like migration](https://github.com/EventStore/EventStore/issues/1344#issuecomment-310026322).*
 
 ## Further Events
 

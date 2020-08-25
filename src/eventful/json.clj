@@ -2,16 +2,17 @@
   (:require [eventful.core :refer [serialize deserialize]]
             [cheshire.core :refer [generate-stream parse-stream]]
             [clojure.java.io :as io])
-  (:import (eventstore Content ContentType$Json$)
-           (akka.util ByteStringBuilder)))
+  (:import (eventstore.core Content ContentType$Json$ ByteString)
+           (java.io ByteArrayOutputStream)))
 
 (defmethod serialize :json
   [x format]
-  (let [builder (ByteStringBuilder.)]
-    (with-open [s (.asOutputStream builder)
-                w (io/writer s)]
-      (generate-stream x w))
-    (Content/apply (.result builder) (ContentType$Json$.))))
+  (with-open [s (ByteArrayOutputStream. 4096)
+              w (io/writer s)]
+    (generate-stream x w)
+    (-> (.toByteArray s)
+        (ByteString/apply)
+        (Content/apply (ContentType$Json$.)))))
 
 (defmethod deserialize :json
   [bytes format]

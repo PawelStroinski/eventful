@@ -3,6 +3,7 @@
   (:require [clojure.tools.cli :as cli]
             [eventful.core :as evf]
             [eventful.json]
+            [eventful.transit]
             [puget.printer :refer [cprint]]))
 
 (defn str->int [x] (Integer/parseInt x))
@@ -17,8 +18,8 @@
    ["-S" "--start X" "Start from event number" :parse-fn str->int]
    ["-l" "--live" "Live subscription"]
    ["-m" "--meta" "Include event metadata"]
-   ["-e" "--edn" "Deserialize EDN instead of Transit-JSON"]
-   ["-j" "--json" "Deserialize plain JSON instead of Transit-JSON"]
+   ["-j" "--json" "Deserialize plain JSON instead of EDN"]
+   ["-t" "--transit" "Deserialize Transit-JSON instead of EDN"]
    ["-h" "--help" "Print this help"]])
 
 (defn valid? [{:keys [stream max-count live]}] (and stream (or max-count live)))
@@ -32,7 +33,7 @@
 (defn opts
   [m]
   (cond-> (select-keys m [:conn :stream])
-          (:edn m) (assoc :format :edn :meta-format :edn)
+          (:transit m) (assoc :format :transit :meta-format :transit)
           (:json m) (assoc :format :json :meta-format :json)))
 
 (defn print-event [x m] (cprint x {:print-meta (:meta m)}) (println))

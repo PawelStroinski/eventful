@@ -2,12 +2,13 @@
   (:require [midje.sweet :refer :all]
             [midje.repl :refer [autotest]]
             [eventful.core :as core :refer :all]
-            [eventful.json])
+            [eventful.json]
+            [eventful.transit])
   (:import (eventstore.j EsConnection EsTransaction)
            (java.util UUID)
            (org.joda.time DateTime)
-           (eventstore EsException)
-           (eventstore.util ActorCloseable)))
+           (eventstore.core EsException)
+           (eventstore.akka ActorCloseable)))
 
 (def
   ^{:doc "If projections are running, tests which read all streams will fail."}
@@ -101,11 +102,10 @@
         (-> actual1 meta :meta vec) => (vec bytes)
         (-> actual2 ::core/val vec) => (vec event2)))
 
-(fact "writing & reading an event as EDN"
-      (let [format-opts {:format :edn :meta-format :edn}
-            event (with-meta foobar {:meta foobar})
-            _ (! (write-events (merge (any-exp-ver-opts) format-opts) event))
-            actual (! (read-event (merge @opts format-opts) 0))
+(fact "events are written as EDN by default"
+      (let [event (with-meta foobar {:meta foobar})
+            _ (! (write-events (any-exp-ver-opts) event))
+            actual (! (read-event @opts 0))
             bytes (! (read-event (merge @opts bytes-opts) 0))
             expected (str foobar)]
         actual => foobar
@@ -113,13 +113,17 @@
         (String. (::core/val bytes) "UTF-8") => expected
         (String. (-> bytes meta :meta) "UTF-8") => expected))
 
-(fact "events are written as Transit-JSON by default"
-      (let [event (with-meta foobar {:meta foobar})
-            _ (! (write-events (any-exp-ver-opts) event))
-            actual (! (read-event (merge @opts bytes-opts) 0))
+(fact "writing & reading an event as Transit-JSON"
+      (let [format-opts {:format :transit :meta-format :transit}
+            event (with-meta foobar {:meta foobar})
+            _ (! (write-events (merge (any-exp-ver-opts) format-opts) event))
+            actual (! (read-event (merge @opts format-opts) 0))
+            bytes (! (read-event (merge @opts bytes-opts) 0))
             expected "[\"^ \",\"~:foo\",\"~:bar\"]"]
-        (String. (::core/val actual) "UTF-8") => expected
-        (String. (-> actual meta :meta) "UTF-8") => expected))
+        actual => foobar
+        (-> actual meta :meta) => foobar
+        (String. (::core/val bytes) "UTF-8") => expected
+        (String. (-> bytes meta :meta) "UTF-8") => expected))
 
 (fact "writing & reading naked primitives as events"
       (let [event1 (with-meta {::core/val 100} {:meta 1/3})

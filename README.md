@@ -1,6 +1,6 @@
 # Eventful
 
-Eventful is an [Event Store](https://eventstore.org/) client library which wraps
+Eventful is an [EventStoreDB](https://eventstore.com/) client library which wraps
 around the [JVM Client](https://github.com/EventStore/EventStore.JVM) (TCP
 interface).
 
@@ -8,10 +8,6 @@ It provides (hopefully) Clojure-friendly functions to work with the Event Store
 and covers (almost) all of the API of the JVM Client.
 
 [![Clojars Project](https://img.shields.io/clojars/v/eventful.svg)](https://clojars.org/eventful)
-
-## Warning
-
-This library is still in alpha.
 
 ## Demo
 
@@ -39,13 +35,17 @@ This small example demonstrates writing and reading an event:
   (prn @(read-event {:conn conn :stream "inventory-item-1"} 0)))
 ```
 
+## Roadmap
+
+* Consider switching Eventful to the [new official Java client](https://github.com/EventStore/EventStoreDB-Client-Java) without breaking the API.
+
 ## Not Implemented
 
-* [Projections Client (HTTP)](https://eventstore.org/docs/dotnet-api/4.0.2/projections/) - `eventstore.ProjectionsClient`
+* [Projections Client (HTTP)](https://eventstore.com/docs/dotnet-api/projections/index.html) - `eventstore.ProjectionsClient`
 
 ## License
 
-Copyright © 2019 Paweł Stroiński
+Copyright © 2020 Paweł Stroiński
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.
